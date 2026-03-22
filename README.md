@@ -1,73 +1,140 @@
-# React + TypeScript + Vite
+# SRE-FE
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Modern SaaS frontend for organization management — authentication, org management, and member role control.
 
-Currently, two official plugins are available:
+> Open-source project built with React 19, TypeScript, and TanStack libraries.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Layer | Library / Tool |
+|---|---|
+| Framework | React 19 + TypeScript (strict) |
+| Bundler | Vite |
+| Routing | TanStack Router |
+| Server State | TanStack React Query |
+| Forms | TanStack React Form |
+| Tables | TanStack React Table |
+| Styling | Tailwind CSS v4 |
+| Components | Shadcn UI |
+| HTTP | Axios |
+| Toasts | Sonner |
+| Icons | Lucide React |
+| Errors | Sentry |
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Project Structure
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+src/
+├── api/              # Axios client + endpoint modules + page-level query/mutation hooks
+├── components/
+│   └── ui/           # Shadcn UI primitives
+├── contexts/         # AuthContext
+├── layouts/          # RootLayout, AuthLayout, AppLayout
+├── pages/            # auth/, org/, user/ pages
+├── router.tsx        # TanStack Router config + route guards
+├── types/            # Shared TypeScript types
+├── utils/            # Shared utility functions
+└── main.tsx          # App entry point
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Routes
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+| Path | Page | Guard |
+|---|---|---|
+| `/` | redirect | → `/orgs` if authed, → `/login` if not |
+| `/login` | LoginPage | → `/orgs` if already authed |
+| `/register` | RegisterPage | → `/orgs` if already authed |
+| `/profile` | ProfilePage | → `/login` if not authed |
+| `/orgs` | OrgListPage | → `/login` if not authed |
+| `/orgs/$orgId/members` | OrgMembersPage | → `/login` if not authed |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- npm
+
+### Installation
+
+```bash
+git clone https://github.com/your-org/sre-fe.git
+cd sre-fe
+npm install
 ```
+
+### Environment
+
+Copy the example env file and configure your API base URL:
+
+```bash
+cp .env.example .env
+```
+
+### Development
+
+```bash
+npm run dev
+```
+
+### Build
+
+```bash
+npm run build
+```
+
+### Preview
+
+```bash
+npm run preview
+```
+
+### Lint
+
+```bash
+npm run lint
+```
+
+---
+
+## Auth
+
+- JWT-based: access token stored in memory, refresh token in `localStorage`
+- Axios interceptor silently refreshes on 401
+- `AuthContext` runs a silent refresh on mount
+
+---
+
+## API
+
+All API calls go through `src/api/client.ts` (Axios instance). Default base URL: `http://localhost:8080/api/v1`.
+
+Each domain has its own module:
+- `src/api/auth.ts` — login, register, refresh
+- `src/api/orgs.ts` — org CRUD
+- `src/api/users.ts` — user profile
+
+Page-level data fetching is handled by dedicated hook files (e.g., `src/api/useOrgMembers.ts`).
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feat/your-feature`)
+3. Commit your changes
+4. Open a pull request
+
+---
+
+## License
+
+MIT

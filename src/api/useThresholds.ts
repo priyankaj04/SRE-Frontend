@@ -1,0 +1,64 @@
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import {
+  getThresholds,
+  updateThreshold,
+  deleteThreshold,
+  getIncidents,
+  listOrgIncidents,
+  getIncidentById,
+  type UpdateThresholdBody,
+} from './thresholds'
+
+export function useThresholds(accountId: string, resourceId: string) {
+  return useQuery({
+    queryKey: ['thresholds', accountId, resourceId],
+    queryFn: () => getThresholds(accountId, resourceId),
+    enabled: !!accountId && !!resourceId,
+  })
+}
+
+export function useUpdateThreshold(accountId: string, resourceId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ thresholdId, body }: { thresholdId: string; body: UpdateThresholdBody }) =>
+      updateThreshold(accountId, resourceId, thresholdId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['thresholds', accountId, resourceId] })
+    },
+  })
+}
+
+export function useDeleteThreshold(accountId: string, resourceId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (thresholdId: string) => deleteThreshold(accountId, resourceId, thresholdId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['thresholds', accountId, resourceId] })
+    },
+  })
+}
+
+export function useIncidents(accountId: string, resourceId: string) {
+  return useQuery({
+    queryKey: ['incidents', accountId, resourceId],
+    queryFn: () => getIncidents(accountId, resourceId),
+    enabled: !!accountId && !!resourceId,
+  })
+}
+
+export function useOrgIncidents(orgId: string | undefined, params: { limit?: number; offset?: number }) {
+  return useQuery({
+    queryKey: ['org-incidents', orgId, params],
+    queryFn: () => listOrgIncidents(orgId!, params),
+    enabled: !!orgId,
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useIncidentById(orgId: string | undefined, incidentId: string) {
+  return useQuery({
+    queryKey: ['incident', orgId, incidentId],
+    queryFn: () => getIncidentById(orgId!, incidentId),
+    enabled: !!orgId && !!incidentId,
+  })
+}
