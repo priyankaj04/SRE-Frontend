@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { login as apiLogin, logout as apiLogout, register as apiRegister } from '@/api/auth'
 import type { LoginPayload, RegisterPayload, AuthUser, AuthOrg, OrgRole } from '@/api/auth'
+import { getMyOrgs } from '@/api/orgs'
 import { setAccessToken, apiClient } from '@/api/client'
 import { router } from '@/router'
 
@@ -46,7 +47,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAccessToken(data.accessToken)
 
         const { data: user } = await apiClient.get<AuthUser>('/users/me')
-        setState({ user, org: null, role: null, isAuthenticated: true, isLoading: false })
+        const orgs = await getMyOrgs()
+        const firstOrg = orgs?.[0]
+        const org: AuthOrg | null = firstOrg ? { id: firstOrg.id, name: firstOrg.name, slug: firstOrg.slug } : null
+        const role: OrgRole | null = firstOrg?.role ?? null
+        setState({ user, org, role, isAuthenticated: true, isLoading: false })
       } catch {
         setState({ user: null, org: null, role: null, isAuthenticated: false, isLoading: false })
       }

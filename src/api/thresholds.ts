@@ -34,10 +34,10 @@ export interface UpdateThresholdBody {
 }
 
 export async function getThresholds(accountId: string, resourceId: string): Promise<Threshold[]> {
-  const { data } = await apiClient.get<{ status: number; data: Threshold[] }>(
+  const { data } = await apiClient.get<Threshold[]>(
     `/cloud-accounts/${accountId}/resources/${resourceId}/thresholds`,
   )
-  return data.data
+  return data
 }
 
 export async function updateThreshold(
@@ -46,11 +46,11 @@ export async function updateThreshold(
   thresholdId: string,
   body: UpdateThresholdBody,
 ): Promise<Threshold> {
-  const { data } = await apiClient.patch<{ status: number; data: Threshold }>(
+  const { data } = await apiClient.patch<Threshold>(
     `/cloud-accounts/${accountId}/resources/${resourceId}/thresholds/${thresholdId}`,
     body,
   )
-  return data.data
+  return data
 }
 
 export async function deleteThreshold(
@@ -64,10 +64,10 @@ export async function deleteThreshold(
 }
 
 export async function getIncidents(accountId: string, resourceId: string): Promise<Incident[]> {
-  const { data } = await apiClient.get<{ status: number; data: Incident[] }>(
+  const { data } = await apiClient.get<Incident[]>(
     `/cloud-accounts/${accountId}/resources/${resourceId}/incidents`,
   )
-  return data.data
+  return data
 }
 
 // ─── Org-level incidents ───────────────────────────────────────────────────────
@@ -106,16 +106,16 @@ export async function listOrgIncidents(
   orgId: string,
   params: { limit?: number; offset?: number },
 ): Promise<OrgIncidentsResponse> {
-  const { data } = await apiClient.get<{ status: number; data: OrgIncident[]; pagination: OrgIncidentsPagination }>(
+  const { data } = await apiClient.get<OrgIncidentsResponse>(
     `/orgs/${orgId}/incidents`,
     { params },
   )
-  return { data: data.data, pagination: data.pagination }
+  return data
 }
 
 export async function getIncidentById(orgId: string, incidentId: string): Promise<OrgIncident> {
-  const { data } = await apiClient.get<{ status: number; data: OrgIncident }>(
+  const { data } = await apiClient.get<OrgIncident>(
     `/orgs/${orgId}/incidents/${incidentId}`,
   )
-  return data.data
+  return data
 }

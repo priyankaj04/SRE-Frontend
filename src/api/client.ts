@@ -28,15 +28,19 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 })
 
 // Unwrap { status: 1, data: {...} } envelope from all successful responses.
+// If the response has sibling fields alongside `data` (e.g. pagination, meta),
+// they are preserved: { data, ...rest }. Simple responses unwrap to `data` directly.
 // This runs before the 401 error interceptor so retry responses are also unwrapped.
 apiClient.interceptors.response.use((res) => {
+  const raw = res.data
   if (
-    res.data !== null &&
-    typeof res.data === 'object' &&
-    res.data.status === 1 &&
-    'data' in res.data
+    raw !== null &&
+    typeof raw === 'object' &&
+    (raw as Record<string, unknown>).status === 1 &&
+    'data' in (raw as Record<string, unknown>)
   ) {
-    res.data = (res.data as { status: number; data: unknown }).data
+    const { status: _s, data, ...rest } = raw as Record<string, unknown>
+    res.data = Object.keys(rest).length === 0 ? data : { data, ...rest }
   }
   return res
 })

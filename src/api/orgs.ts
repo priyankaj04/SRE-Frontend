@@ -7,13 +7,16 @@ export interface Org {
   name: string
   slug: string
   role: OrgRole
+  plan?: string
+  joinedAt?: string
 }
 
 export interface OrgMember {
-  userId: string
+  id: string
   full_name: string
   email: string
   role: OrgRole
+  joined_at: string
 }
 
 export interface Pagination {
@@ -28,8 +31,8 @@ export interface MembersResponse {
 }
 
 export async function getMyOrgs(): Promise<Org[]> {
-  const { data } = await apiClient.get<{ data: Org[] }>('/orgs/me')
-  return data.data
+  const { data } = await apiClient.get<Org[]>('/orgs/me')
+  return data
 }
 
 export async function listMembers(
@@ -48,7 +51,7 @@ export async function changeMemberRole(
   orgId: string,
   userId: string,
   role: OrgRole,
-): Promise<{ userId: string; role: OrgRole }> {
+): Promise<{ id: string; role: OrgRole }> {
   const { data } = await apiClient.patch(
     `/orgs/${orgId}/members/${userId}/role`,
     { role },

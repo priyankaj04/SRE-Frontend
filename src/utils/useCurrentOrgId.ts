@@ -9,5 +9,7 @@ export function useCurrentOrgId(): string | undefined {
     queryFn: getMyOrgs,
     enabled: !org?.id,
   })
+
+  console.log("orgsQuery", orgsQuery)
   return org?.id ?? orgsQuery.data?.[0]?.id
 }

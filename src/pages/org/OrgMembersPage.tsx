@@ -145,7 +145,7 @@ export default function OrgMembersPage() {
               </TableHeader>
               <TableBody>
                 {data.data.map((member) => (
-                  <TableRow key={member.userId}>
+                  <TableRow key={member.id}>
                     <TableCell>
                       <div className="flex items-center gap-2.5">
                         <Avatar className="h-7 w-7">
@@ -258,7 +258,7 @@ export default function OrgMembersPage() {
             <Button
               disabled={roleChangeMutation.isPending}
               onClick={() =>
-                roleTarget && roleChangeMutation.mutate({ userId: roleTarget.userId, role: selectedRole })
+                roleTarget && roleChangeMutation.mutate({ userId: roleTarget.id, role: selectedRole })
               }
             >
               {roleChangeMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -276,7 +276,7 @@ export default function OrgMembersPage() {
         description={<>Are you sure you want to remove <strong>{removeTarget?.full_name}</strong> from this organisation? This cannot be undone.</>}
         confirmLabel="Remove"
         isPending={removeMutation.isPending}
-        onConfirm={() => removeTarget && removeMutation.mutate(removeTarget.userId)}
+        onConfirm={() => removeTarget && removeMutation.mutate(removeTarget.id)}
       />
     </div>
   )

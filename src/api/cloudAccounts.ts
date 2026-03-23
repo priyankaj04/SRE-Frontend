@@ -5,6 +5,7 @@ export type SyncStatus = 'idle' | 'syncing' | 'done' | 'failed'
 
 export interface CloudAccount {
   id: string
+  org_id: string
   name: string
   provider: string
   auth_type: AuthType
@@ -13,6 +14,7 @@ export interface CloudAccount {
   last_synced_at: string | null
   credential_display: string
   created_at: string
+  updated_at: string
 }
 
 export interface AccessKeyCredentials {
@@ -44,11 +46,13 @@ export interface ValidateResult {
 export interface SyncJobResponse {
   jobId: string | null
   status: string
+  accountId?: string
 }
 
 export interface SyncStatusResponse {
+  syncStatus?: string
   jobId?: string
-  status: string
+  status?: string
   progress?: number
   failReason?: string
   returnValue?: unknown
@@ -60,8 +64,8 @@ export async function listCloudAccounts(): Promise<CloudAccount[]> {
 }
 
 export async function createCloudAccount(payload: CreateCloudAccountPayload): Promise<CloudAccount> {
-  const { data } = await apiClient.post<{ data: CloudAccount }>('/cloud-accounts', payload)
-  return data.data
+  const { data } = await apiClient.post<CloudAccount>('/cloud-accounts', payload)
+  return data
 }
 
 export async function deleteCloudAccount(id: string): Promise<void> {

@@ -24,7 +24,6 @@ import {
 } from '@/components/ui/table'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
-import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { useOrgIncidents } from '@/api/useThresholds'
 import type { OrgIncident } from '@/api/thresholds'
 import { useCurrentOrgId } from '@/utils/useCurrentOrgId'
@@ -138,6 +137,8 @@ export default function IncidentsListPage() {
   const navigate = useNavigate()
   const orgId = useCurrentOrgId()
 
+  console.log("orgId", orgId)
+
   const { data, isLoading, isError, refetch } = useOrgIncidents(orgId, { limit: LIMIT, offset })
 
   function setPage(newOffset: number) {
@@ -155,7 +156,7 @@ export default function IncidentsListPage() {
   const hasMore = pagination?.hasMore ?? false
   const currentStart = total === 0 ? 0 : offset + 1
   const currentEnd = Math.min(offset + LIMIT, total)
-  const isEmpty = !isLoading && !isError && incidents.length === 0
+  const isEmpty = !!orgId && !isLoading && !isError && incidents.length === 0
   const canGoPrev = offset > 0
   const canGoNext = hasMore || offset + LIMIT < total
 
@@ -202,7 +203,7 @@ export default function IncidentsListPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading
+              {isLoading || !orgId
                 ? Array.from({ length: 6 }, (_, i) => <SkeletonRow key={i} />)
                 : incidents.map((incident) => (
                     <IncidentRow key={incident.id} incident={incident} />
@@ -248,8 +249,6 @@ export default function IncidentsListPage() {
         </div>
       )}
 
-      {/* Loading spinner while org is being resolved */}
-      {!orgId && !isError && <LoadingSpinner className="py-24" />}
     </div>
   )
 }

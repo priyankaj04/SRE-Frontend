@@ -5,6 +5,8 @@ export interface User {
   email: string
   fullName: string
   createdAt: string
+  isVerified?: boolean
+  lastLoginAt?: string
 }
 
 export interface UpdateProfilePayload {
