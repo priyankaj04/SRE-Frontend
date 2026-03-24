@@ -33,6 +33,20 @@ export interface UpdateThresholdBody {
   sns_topic_arn?: string | null
 }
 
+export interface AvailableThreshold {
+  metric_name: string
+  operator: string
+  threshold_value: number
+  evaluation_periods: number
+  period: number
+  threshold_type: string
+  statistic: string
+}
+
+export interface CreateThresholdBody {
+  metric_name: string
+}
+
 export async function getThresholds(accountId: string, resourceId: string): Promise<Threshold[]> {
   const { data } = await apiClient.get<Threshold[]>(
     `/cloud-accounts/${accountId}/resources/${resourceId}/thresholds`,
@@ -61,6 +75,28 @@ export async function deleteThreshold(
   await apiClient.delete(
     `/cloud-accounts/${accountId}/resources/${resourceId}/thresholds/${thresholdId}`,
   )
+}
+
+export async function getAvailableThresholds(
+  accountId: string,
+  resourceId: string,
+): Promise<AvailableThreshold[]> {
+  const { data } = await apiClient.get<AvailableThreshold[]>(
+    `/cloud-accounts/${accountId}/resources/${resourceId}/thresholds/available`,
+  )
+  return data
+}
+
+export async function createThreshold(
+  accountId: string,
+  resourceId: string,
+  body: CreateThresholdBody,
+): Promise<Threshold> {
+  const { data } = await apiClient.post<Threshold>(
+    `/cloud-accounts/${accountId}/resources/${resourceId}/thresholds`,
+    body,
+  )
+  return data
 }
 
 export async function getIncidents(accountId: string, resourceId: string): Promise<Incident[]> {

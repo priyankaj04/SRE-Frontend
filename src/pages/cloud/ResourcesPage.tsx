@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type ElementType } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Link, useParams, useSearch, useNavigate } from '@tanstack/react-router'
 import {
   Server,
@@ -20,6 +21,7 @@ import {
   Check,
   X as XIcon,
   AlertTriangle,
+  Plus,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -49,9 +51,9 @@ import {
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { useResources, useTriggerSync } from '@/api/useCloudAccounts'
-import { useThresholds, useUpdateThreshold, useDeleteThreshold, useIncidents } from '@/api/useThresholds'
+import { useThresholds, useAvailableThresholds, useCreateThreshold, useUpdateThreshold, useDeleteThreshold, useIncidents } from '@/api/useThresholds'
 import type { Resource } from '@/api/cloudAccounts'
-import type { Threshold } from '@/api/thresholds'
+import type { Threshold, AvailableThreshold } from '@/api/thresholds'
 import { useDebounce } from '@/utils/useDebounce'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -97,6 +99,13 @@ function extractErrorMessage(err: unknown): string {
     return res?.data?.error?.message ?? 'Something went wrong'
   }
   return 'Network error — please try again'
+}
+
+function getHttpStatus(err: unknown): number {
+  if (err && typeof err === 'object' && 'response' in err) {
+    return (err as { response?: { status?: number } }).response?.status ?? 0
+  }
+  return 0
 }
 
 function formatRelativeTime(dateStr: string | null): string {
@@ -204,6 +213,50 @@ interface ThresholdsTabProps {
   resourceId: string
 }
 
+function AvailableRow({
+  item,
+  isAdding,
+  error,
+  onAdd,
+}: {
+  item: AvailableThreshold
+  isAdding: boolean
+  error: string | undefined
+  onAdd: (metricName: string) => void
+}) {
+  return (
+    <TableRow>
+      <TableCell className="text-sm">{item.metric_name}</TableCell>
+      <TableCell className="font-mono text-sm text-muted-foreground">
+        {formatOperator(item.operator)} {item.threshold_value}
+      </TableCell>
+      <TableCell className="text-xs text-muted-foreground">
+        {item.evaluation_periods}× {formatPeriod(item.period)}
+      </TableCell>
+      <TableCell>
+        {error && (
+          <span className="text-xs text-destructive">{error}</span>
+        )}
+      </TableCell>
+      <TableCell className="w-16 text-right">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 text-xs gap-1"
+          disabled={isAdding}
+          onClick={() => onAdd(item.metric_name)}
+        >
+          {isAdding
+            ? <Loader2 size={10} className="animate-spin" />
+            : <Plus size={10} />
+          }
+          Add
+        </Button>
+      </TableCell>
+    </TableRow>
+  )
+}
+
 function ThresholdsTab({ accountId, resourceId }: ThresholdsTabProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
@@ -214,10 +267,15 @@ function ThresholdsTab({ accountId, resourceId }: ThresholdsTabProps) {
     period: 300,
     sns_topic_arn: '',
   })
+  const [addingMetric, setAddingMetric] = useState<string | null>(null)
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
 
-  const { data: thresholds = [], isLoading } = useThresholds(accountId, resourceId)
+  const qc = useQueryClient()
+  const { data: thresholds = [], isLoading: isLoadingThresholds } = useThresholds(accountId, resourceId)
+  const { data: available = [], isLoading: isLoadingAvailable } = useAvailableThresholds(accountId, resourceId)
   const updateMutation = useUpdateThreshold(accountId, resourceId)
   const deleteMutation = useDeleteThreshold(accountId, resourceId)
+  const createMutation = useCreateThreshold(accountId, resourceId)
 
   function startEdit(t: Threshold) {
     setDeleteConfirmId(null)
@@ -269,6 +327,29 @@ function ThresholdsTab({ accountId, resourceId }: ThresholdsTabProps) {
     }
   }
 
+  async function handleAdd(metricName: string) {
+    setAddingMetric(metricName)
+    setRowErrors((prev) => { const n = { ...prev }; delete n[metricName]; return n })
+    try {
+      await createMutation.mutateAsync({ metric_name: metricName })
+    } catch (err) {
+      const status = getHttpStatus(err)
+      if (status === 409) {
+        qc.invalidateQueries({ queryKey: ['thresholds', accountId, resourceId] })
+        qc.invalidateQueries({ queryKey: ['available-thresholds', accountId, resourceId] })
+        setRowErrors((prev) => ({ ...prev, [metricName]: 'Already exists' }))
+      } else if (status === 400) {
+        setRowErrors((prev) => ({ ...prev, [metricName]: 'Invalid metric' }))
+      } else {
+        setRowErrors((prev) => ({ ...prev, [metricName]: 'Failed to add' }))
+      }
+    } finally {
+      setAddingMetric(null)
+    }
+  }
+
+  const isLoading = isLoadingThresholds || isLoadingAvailable
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-10">
@@ -277,7 +358,10 @@ function ThresholdsTab({ accountId, resourceId }: ThresholdsTabProps) {
     )
   }
 
-  if (thresholds.length === 0) {
+  const hasActive = thresholds.length > 0
+  const hasAvailable = available.length > 0
+
+  if (!hasActive && !hasAvailable) {
     return (
       <div className="flex flex-col items-center justify-center py-10 text-center">
         <div className="h-9 w-9 rounded-full bg-muted flex items-center justify-center mb-2">
@@ -289,187 +373,225 @@ function ThresholdsTab({ accountId, resourceId }: ThresholdsTabProps) {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-lg border border-border/60 overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/30">
-              <TableHead>Metric</TableHead>
-              <TableHead className="w-20">Condition</TableHead>
-              <TableHead className="w-20">Check</TableHead>
-              <TableHead className="w-32">Alarm</TableHead>
-              <TableHead className="w-14" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {thresholds.map((t) => {
-              const isEditing = editingId === t.id
-              return (
-                <TableRow key={t.id} className={isEditing ? 'bg-muted/20' : ''}>
-                  <TableCell>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm">{t.metric_name}</span>
-                      {t.is_default && (
-                        <Badge
-                          variant="outline"
-                          className="text-xs h-4 px-1 border-primary/30 text-primary bg-primary/5"
-                        >
-                          default
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-sm font-mono">
-                    {formatOperator(t.operator)} {t.threshold_value}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {t.evaluation_periods}× {formatPeriod(t.period)}
-                  </TableCell>
-                  <TableCell>
-                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${alarmDotCls(t.alarm_name)}`} />
-                      {t.alarm_name
-                        ? <span className="truncate max-w-20">{t.alarm_name}</span>
-                        : 'Not linked'
-                      }
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-0.5 justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-                        onClick={() => isEditing ? cancelEdit() : startEdit(t)}
-                      >
-                        {isEditing ? <XIcon size={12} /> : <Pencil size={12} />}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => setDeleteConfirmId(t.id)}
-                        disabled={deleteMutation.isPending && deleteConfirmId === t.id}
-                      >
-                        <Trash2 size={12} />
-                      </Button>
-                    </div>
-                  </TableCell>
+    <div className="space-y-4">
+      {/* Active thresholds */}
+      {hasActive && (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-border/60 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30">
+                  <TableHead>Metric</TableHead>
+                  <TableHead className="w-20">Condition</TableHead>
+                  <TableHead className="w-20">Check</TableHead>
+                  <TableHead className="w-32">Alarm</TableHead>
+                  <TableHead className="w-14" />
                 </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-      </div>
+              </TableHeader>
+              <TableBody>
+                {thresholds.map((t) => {
+                  const isEditing = editingId === t.id
+                  return (
+                    <TableRow key={t.id} className={isEditing ? 'bg-muted/20' : ''}>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm">{t.metric_name}</span>
+                          {t.is_default && (
+                            <Badge
+                              variant="outline"
+                              className="text-xs h-4 px-1 border-primary/30 text-primary bg-primary/5"
+                            >
+                              default
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm font-mono">
+                        {formatOperator(t.operator)} {t.threshold_value}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {t.evaluation_periods}× {formatPeriod(t.period)}
+                      </TableCell>
+                      <TableCell>
+                        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${alarmDotCls(t.alarm_name)}`} />
+                          {t.alarm_name
+                            ? <span className="truncate max-w-20">{t.alarm_name}</span>
+                            : 'Not linked'
+                          }
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-0.5 justify-end">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                            onClick={() => isEditing ? cancelEdit() : startEdit(t)}
+                          >
+                            {isEditing ? <XIcon size={12} /> : <Pencil size={12} />}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => setDeleteConfirmId(t.id)}
+                            disabled={deleteMutation.isPending && deleteConfirmId === t.id}
+                          >
+                            <Trash2 size={12} />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
 
-      {/* Edit form panel */}
-      {editingId && (
-        <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3 animate-in fade-in-0 slide-in-from-top-1 duration-150">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Edit Threshold
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <Label className="text-xs mb-1 block">Operator</Label>
-              <Select
-                value={editForm.operator}
-                onValueChange={(v) => setEditForm((f) => ({ ...f, operator: v ?? f.operator }))}
+          {/* Edit form panel */}
+          {editingId && (
+            <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3 animate-in fade-in-0 slide-in-from-top-1 duration-150">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Edit Threshold
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <Label className="text-xs mb-1 block">Operator</Label>
+                  <Select
+                    value={editForm.operator}
+                    onValueChange={(v) => setEditForm((f) => ({ ...f, operator: v ?? f.operator }))}
+                  >
+                    <SelectTrigger size="sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {OPERATOR_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block">Threshold Value</Label>
+                  <Input
+                    type="number"
+                    className="h-7 text-xs"
+                    value={editForm.threshold_value}
+                    onChange={(e) => setEditForm((f) => ({ ...f, threshold_value: Number(e.target.value) }))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block">Evaluation Periods</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    className="h-7 text-xs"
+                    value={editForm.evaluation_periods}
+                    onChange={(e) => setEditForm((f) => ({ ...f, evaluation_periods: Number(e.target.value) }))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block">Period (seconds)</Label>
+                  <Input
+                    type="number"
+                    min={60}
+                    step={60}
+                    className="h-7 text-xs"
+                    value={editForm.period}
+                    onChange={(e) => setEditForm((f) => ({ ...f, period: Number(e.target.value) }))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block">SNS Topic ARN</Label>
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="Optional"
+                    value={editForm.sns_topic_arn}
+                    onChange={(e) => setEditForm((f) => ({ ...f, sns_topic_arn: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={cancelEdit}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  disabled={updateMutation.isPending}
+                  onClick={handleSave}
+                >
+                  {updateMutation.isPending
+                    ? <Loader2 size={11} className="animate-spin" />
+                    : <Check size={11} />
+                  }
+                  Save
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Delete confirm banner */}
+          {deleteConfirmId && !editingId && (
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 animate-in fade-in-0 duration-150">
+              <AlertTriangle size={14} className="text-destructive shrink-0" />
+              <span className="text-destructive text-xs flex-1">
+                Delete this threshold? This cannot be undone.
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 text-xs"
+                onClick={() => setDeleteConfirmId(null)}
               >
-                <SelectTrigger size="sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {OPERATOR_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-6 text-xs gap-1"
+                disabled={deleteMutation.isPending}
+                onClick={handleDelete}
+              >
+                {deleteMutation.isPending && <Loader2 size={11} className="animate-spin" />}
+                Delete
+              </Button>
             </div>
-            <div>
-              <Label className="text-xs mb-1 block">Threshold Value</Label>
-              <Input
-                type="number"
-                className="h-7 text-xs"
-                value={editForm.threshold_value}
-                onChange={(e) => setEditForm((f) => ({ ...f, threshold_value: Number(e.target.value) }))}
-              />
-            </div>
-            <div>
-              <Label className="text-xs mb-1 block">Evaluation Periods</Label>
-              <Input
-                type="number"
-                min={1}
-                className="h-7 text-xs"
-                value={editForm.evaluation_periods}
-                onChange={(e) => setEditForm((f) => ({ ...f, evaluation_periods: Number(e.target.value) }))}
-              />
-            </div>
-            <div>
-              <Label className="text-xs mb-1 block">Period (seconds)</Label>
-              <Input
-                type="number"
-                min={60}
-                step={60}
-                className="h-7 text-xs"
-                value={editForm.period}
-                onChange={(e) => setEditForm((f) => ({ ...f, period: Number(e.target.value) }))}
-              />
-            </div>
-            <div>
-              <Label className="text-xs mb-1 block">SNS Topic ARN</Label>
-              <Input
-                className="h-7 text-xs"
-                placeholder="Optional"
-                value={editForm.sns_topic_arn}
-                onChange={(e) => setEditForm((f) => ({ ...f, sns_topic_arn: e.target.value }))}
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={cancelEdit}>
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              className="h-7 text-xs gap-1"
-              disabled={updateMutation.isPending}
-              onClick={handleSave}
-            >
-              {updateMutation.isPending
-                ? <Loader2 size={11} className="animate-spin" />
-                : <Check size={11} />
-              }
-              Save
-            </Button>
-          </div>
+          )}
         </div>
       )}
 
-      {/* Delete confirm banner */}
-      {deleteConfirmId && !editingId && (
-        <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-destructive/10 border border-destructive/20 animate-in fade-in-0 duration-150">
-          <AlertTriangle size={14} className="text-destructive shrink-0" />
-          <span className="text-destructive text-xs flex-1">
-            Delete this threshold? This cannot be undone.
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 text-xs"
-            onClick={() => setDeleteConfirmId(null)}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            className="h-6 text-xs gap-1"
-            disabled={deleteMutation.isPending}
-            onClick={handleDelete}
-          >
-            {deleteMutation.isPending && <Loader2 size={11} className="animate-spin" />}
-            Delete
-          </Button>
+      {/* Available Metrics */}
+      {hasAvailable && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Available Metrics
+          </p>
+          <div className="rounded-lg border border-border/60 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30">
+                  <TableHead>Metric</TableHead>
+                  <TableHead className="w-24">Condition</TableHead>
+                  <TableHead className="w-20">Check</TableHead>
+                  <TableHead />
+                  <TableHead className="w-16" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {available.map((item) => (
+                  <AvailableRow
+                    key={item.metric_name}
+                    item={item}
+                    isAdding={addingMetric === item.metric_name}
+                    error={rowErrors[item.metric_name]}
+                    onAdd={handleAdd}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
     </div>

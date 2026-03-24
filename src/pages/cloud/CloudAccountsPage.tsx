@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   XCircle,
   LayoutList,
+  Info,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -41,7 +42,6 @@ import {
 } from '@/api/useCloudAccounts'
 import type {
   CloudAccount,
-  AuthType,
   SyncStatus,
   ValidateResult,
   CreateCloudAccountPayload,
@@ -50,8 +50,26 @@ import type {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const AWS_REGIONS = [
+  // US
   'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2',
-  'eu-west-1', 'eu-central-1', 'ap-south-1', 'ap-southeast-1', 'ap-northeast-1',
+  // Africa
+  'af-south-1',
+  // Asia Pacific
+  'ap-east-1', 'ap-south-1', 'ap-south-2',
+  'ap-southeast-1', 'ap-southeast-2', 'ap-southeast-3', 'ap-southeast-4', 'ap-southeast-5',
+  'ap-northeast-1', 'ap-northeast-2', 'ap-northeast-3',
+  // Canada
+  'ca-central-1', 'ca-west-1',
+  // Europe
+  'eu-central-1', 'eu-central-2',
+  'eu-west-1', 'eu-west-2', 'eu-west-3',
+  'eu-north-1', 'eu-south-1', 'eu-south-2',
+  // Israel
+  'il-central-1',
+  // Middle East
+  'me-central-1', 'me-south-1',
+  // South America
+  'sa-east-1',
 ] as const
 
 const SYNC_BADGE: Record<SyncStatus, { label: string; cls: string; spin: boolean }> = {
@@ -90,12 +108,6 @@ function regionBtnCls(selected: boolean): string {
   return selected
     ? 'text-xs px-2 py-1 rounded-md border border-primary/40 bg-primary/10 text-primary transition-colors duration-150'
     : 'text-xs px-2 py-1 rounded-md border border-border/60 bg-background text-muted-foreground hover:border-border hover:text-foreground transition-colors duration-150'
-}
-
-function authTypeBtnCls(active: boolean): string {
-  return active
-    ? 'flex-1 py-1.5 text-xs font-medium bg-primary/10 text-primary transition-colors duration-150'
-    : 'flex-1 py-1.5 text-xs font-medium bg-background text-muted-foreground hover:bg-accent/50 transition-colors duration-150'
 }
 
 // ─── AccountCard ──────────────────────────────────────────────────────────────
@@ -274,13 +286,36 @@ function AccountCard({ account, onDeleteRequest }: AccountCardProps) {
 
 // ─── AddAccountModal ──────────────────────────────────────────────────────────
 
+const INLINE_POLICY = `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "sns:CreateTopic",
+        "sns:Subscribe",
+        "sns:Publish",
+        "sns:SetTopicAttributes",
+        "sns:GetTopicAttributes"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DescribeAlarms"
+      ],
+      "Resource": "*"
+    }
+  ]
+}`
+
 interface FormState {
   name: string
-  authType: AuthType
   accessKeyId: string
   secretAccessKey: string
-  roleArn: string
-  externalId: string
   regions: string[]
 }
 
@@ -288,28 +323,20 @@ interface FormErrors {
   name?: string
   accessKeyId?: string
   secretAccessKey?: string
-  roleArn?: string
 }
 
 const INITIAL_FORM: FormState = {
   name: '',
-  authType: 'access_key',
   accessKeyId: '',
   secretAccessKey: '',
-  roleArn: '',
-  externalId: '',
   regions: [],
 }
 
 function validateForm(form: FormState): FormErrors {
   const errors: FormErrors = {}
   if (!form.name.trim()) errors.name = 'Name is required'
-  if (form.authType === 'access_key') {
-    if (!form.accessKeyId.trim()) errors.accessKeyId = 'Access Key ID is required'
-    if (!form.secretAccessKey.trim()) errors.secretAccessKey = 'Secret Access Key is required'
-  } else {
-    if (!form.roleArn.trim()) errors.roleArn = 'Role ARN is required'
-  }
+  if (!form.accessKeyId.trim()) errors.accessKeyId = 'Access Key ID is required'
+  if (!form.secretAccessKey.trim()) errors.secretAccessKey = 'Secret Access Key is required'
   return errors
 }
 
@@ -346,16 +373,11 @@ function AddAccountModal({ open, onClose }: AddAccountModalProps) {
     }
     setErrors({})
 
-    const credentials =
-      form.authType === 'access_key'
-        ? { accessKeyId: form.accessKeyId, secretAccessKey: form.secretAccessKey }
-        : { roleArn: form.roleArn, ...(form.externalId ? { externalId: form.externalId } : {}) }
-
     const payload: CreateCloudAccountPayload = {
       name: form.name.trim(),
       provider: 'aws',
-      authType: form.authType,
-      credentials,
+      authType: 'access_key',
+      credentials: { accessKeyId: form.accessKeyId, secretAccessKey: form.secretAccessKey },
       ...(form.regions.length > 0 ? { regions: form.regions } : {}),
     }
 
@@ -368,26 +390,55 @@ function AddAccountModal({ open, onClose }: AddAccountModalProps) {
     }
   }
 
-  // Computed
   const isPending = addMutation.isPending
-  const isAccessKey = form.authType === 'access_key'
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="min-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Cloud size={17} /> Add Cloud Account
           </DialogTitle>
           <DialogDescription>
-            Connect an AWS account using access keys or an IAM role.
+            Connect an AWS account using IAM access keys.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* IAM setup instructions */}
+          <div className="rounded-lg border border-border/60 bg-muted/30 p-3.5 space-y-3">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+              <Info size={13} className="text-primary shrink-0" />
+              IAM User Setup
+            </p>
+            <ol className="space-y-2.5 text-xs text-muted-foreground list-none">
+              <li className="flex gap-2">
+                <span className="h-4 w-4 rounded-full bg-primary/15 text-primary font-semibold flex items-center justify-center shrink-0 text-[10px]">1</span>
+                <span>Go to <strong className="text-foreground">AWS Console → IAM → Users</strong> and create a new user with <strong className="text-foreground">programmatic access</strong>.</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="h-4 w-4 rounded-full bg-primary/15 text-primary font-semibold flex items-center justify-center shrink-0 text-[10px]">2</span>
+                <span>Attach the AWS managed policy: <code className="text-foreground bg-muted px-1 py-0.5 rounded text-[11px]">ReadOnlyAccess</code> — grants read access across all AWS services.</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="h-4 w-4 rounded-full bg-primary/15 text-primary font-semibold flex items-center justify-center shrink-0 text-[10px]">3</span>
+                <div className="space-y-1.5 min-w-0">
+                  <span>Create and attach the following <strong className="text-foreground">inline policy</strong> to allow managing SNS topics and CloudWatch alarms:</span>
+                  <pre className="text-[10px] font-mono bg-muted rounded-md p-2.5 overflow-x-auto leading-relaxed text-foreground whitespace-pre">
+                    {INLINE_POLICY}
+                  </pre>
+                </div>
+              </li>
+              <li className="flex gap-2">
+                <span className="h-4 w-4 rounded-full bg-primary/15 text-primary font-semibold flex items-center justify-center shrink-0 text-[10px]">4</span>
+                <span>After creating the user, go to <strong className="text-foreground">Security credentials</strong> and generate an <strong className="text-foreground">Access Key</strong>. Paste it below.</span>
+              </li>
+            </ol>
+          </div>
+
           {/* Name */}
           <div className="space-y-1.5">
-            <Label htmlFor="ca-name">Name</Label>
+            <Label htmlFor="ca-name">Account Name</Label>
             <Input
               id="ca-name"
               placeholder="e.g. Production AWS"
@@ -398,87 +449,30 @@ function AddAccountModal({ open, onClose }: AddAccountModalProps) {
             {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
 
-          {/* Auth type toggle */}
+          {/* Credentials */}
           <div className="space-y-1.5">
-            <Label>Auth Type</Label>
-            <div className="flex rounded-md border border-border/60 overflow-hidden">
-              <button
-                type="button"
-                className={authTypeBtnCls(isAccessKey)}
-                disabled={isPending}
-                onClick={() => setForm((p) => ({ ...p, authType: 'access_key' }))}
-              >
-                Access Key
-              </button>
-              <button
-                type="button"
-                className={authTypeBtnCls(!isAccessKey)}
-                disabled={isPending}
-                onClick={() => setForm((p) => ({ ...p, authType: 'role_arn' }))}
-              >
-                Role ARN
-              </button>
-            </div>
+            <Label htmlFor="ca-key-id">Access Key ID</Label>
+            <Input
+              id="ca-key-id"
+              placeholder="AKIAIOSFODNN7EXAMPLE"
+              value={form.accessKeyId}
+              onChange={(e) => setForm((p) => ({ ...p, accessKeyId: e.target.value }))}
+              disabled={isPending}
+            />
+            {errors.accessKeyId && <p className="text-xs text-destructive">{errors.accessKeyId}</p>}
           </div>
-
-          {/* Credential fields — access_key */}
-          {isAccessKey && (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="ca-key-id">Access Key ID</Label>
-                <Input
-                  id="ca-key-id"
-                  placeholder="AKIAIOSFODNN7EXAMPLE"
-                  value={form.accessKeyId}
-                  onChange={(e) => setForm((p) => ({ ...p, accessKeyId: e.target.value }))}
-                  disabled={isPending}
-                />
-                {errors.accessKeyId && <p className="text-xs text-destructive">{errors.accessKeyId}</p>}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ca-secret">Secret Access Key</Label>
-                <Input
-                  id="ca-secret"
-                  type="password"
-                  placeholder="wJalrXUtnFEMI..."
-                  value={form.secretAccessKey}
-                  onChange={(e) => setForm((p) => ({ ...p, secretAccessKey: e.target.value }))}
-                  disabled={isPending}
-                />
-                {errors.secretAccessKey && <p className="text-xs text-destructive">{errors.secretAccessKey}</p>}
-              </div>
-            </>
-          )}
-
-          {/* Credential fields — role_arn */}
-          {!isAccessKey && (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="ca-role-arn">Role ARN</Label>
-                <Input
-                  id="ca-role-arn"
-                  placeholder="arn:aws:iam::123456789012:role/SRERole"
-                  value={form.roleArn}
-                  onChange={(e) => setForm((p) => ({ ...p, roleArn: e.target.value }))}
-                  disabled={isPending}
-                />
-                {errors.roleArn && <p className="text-xs text-destructive">{errors.roleArn}</p>}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ca-ext-id">
-                  External ID{' '}
-                  <span className="text-muted-foreground font-normal">(optional)</span>
-                </Label>
-                <Input
-                  id="ca-ext-id"
-                  placeholder="optional-string"
-                  value={form.externalId}
-                  onChange={(e) => setForm((p) => ({ ...p, externalId: e.target.value }))}
-                  disabled={isPending}
-                />
-              </div>
-            </>
-          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="ca-secret">Secret Access Key</Label>
+            <Input
+              id="ca-secret"
+              type="password"
+              placeholder="wJalrXUtnFEMI..."
+              value={form.secretAccessKey}
+              onChange={(e) => setForm((p) => ({ ...p, secretAccessKey: e.target.value }))}
+              disabled={isPending}
+            />
+            {errors.secretAccessKey && <p className="text-xs text-destructive">{errors.secretAccessKey}</p>}
+          </div>
 
           {/* Regions */}
           <div className="space-y-1.5">

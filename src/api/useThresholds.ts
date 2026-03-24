@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import {
   getThresholds,
+  getAvailableThresholds,
+  createThreshold,
   updateThreshold,
   deleteThreshold,
   getIncidents,
@@ -9,6 +11,7 @@ import {
   resolveIncident,
   updateIncident,
   type UpdateThresholdBody,
+  type CreateThresholdBody,
   type UpdateIncidentBody,
 } from './thresholds'
 
@@ -17,6 +20,25 @@ export function useThresholds(accountId: string, resourceId: string) {
     queryKey: ['thresholds', accountId, resourceId],
     queryFn: () => getThresholds(accountId, resourceId),
     enabled: !!accountId && !!resourceId,
+  })
+}
+
+export function useAvailableThresholds(accountId: string, resourceId: string) {
+  return useQuery({
+    queryKey: ['available-thresholds', accountId, resourceId],
+    queryFn: () => getAvailableThresholds(accountId, resourceId),
+    enabled: !!accountId && !!resourceId,
+  })
+}
+
+export function useCreateThreshold(accountId: string, resourceId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: CreateThresholdBody) => createThreshold(accountId, resourceId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['thresholds', accountId, resourceId] })
+      qc.invalidateQueries({ queryKey: ['available-thresholds', accountId, resourceId] })
+    },
   })
 }
 
