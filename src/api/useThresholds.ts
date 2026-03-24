@@ -6,7 +6,10 @@ import {
   getIncidents,
   listOrgIncidents,
   getIncidentById,
+  resolveIncident,
+  updateIncident,
   type UpdateThresholdBody,
+  type UpdateIncidentBody,
 } from './thresholds'
 
 export function useThresholds(accountId: string, resourceId: string) {
@@ -60,5 +63,28 @@ export function useIncidentById(orgId: string | undefined, incidentId: string) {
     queryKey: ['incident', orgId, incidentId],
     queryFn: () => getIncidentById(orgId!, incidentId),
     enabled: !!orgId && !!incidentId,
+  })
+}
+
+export function useResolveIncident(orgId: string | undefined) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (incidentId: string) => resolveIncident(incidentId),
+    onSuccess: (_data, incidentId) => {
+      qc.invalidateQueries({ queryKey: ['incident', orgId, incidentId] })
+      qc.invalidateQueries({ queryKey: ['org-incidents', orgId] })
+    },
+  })
+}
+
+export function useUpdateIncident(orgId: string | undefined) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ incidentId, body }: { incidentId: string; body: UpdateIncidentBody }) =>
+      updateIncident(incidentId, body),
+    onSuccess: (_data, { incidentId }) => {
+      qc.invalidateQueries({ queryKey: ['incident', orgId, incidentId] })
+      qc.invalidateQueries({ queryKey: ['org-incidents', orgId] })
+    },
   })
 }

@@ -78,6 +78,9 @@ export interface OrgIncident {
   threshold_value: number
   alarm_arn: string | null
   state: 'ALARM' | 'INSUFFICIENT_DATA'
+  status: 'open' | 'resolved'
+  priority: 'high' | 'medium' | 'low'
+  assigned_to: string | null
   started_at: string
   resolved_at: string | null
   created_at: string
@@ -88,6 +91,11 @@ export interface OrgIncident {
   cloud_account_id: string
   account_name: string
   raw_payload?: unknown
+}
+
+export interface UpdateIncidentBody {
+  assigned_to?: string | null
+  priority?: 'high' | 'medium' | 'low'
 }
 
 export interface OrgIncidentsPagination {
@@ -117,5 +125,20 @@ export async function getIncidentById(orgId: string, incidentId: string): Promis
   const { data } = await apiClient.get<OrgIncident>(
     `/orgs/${orgId}/incidents/${incidentId}`,
   )
+  return data
+}
+
+export async function resolveIncident(
+  incidentId: string,
+): Promise<Pick<OrgIncident, 'id' | 'status' | 'resolved_at'>> {
+  const { data } = await apiClient.patch(`/incidents/${incidentId}/resolve`)
+  return data
+}
+
+export async function updateIncident(
+  incidentId: string,
+  body: UpdateIncidentBody,
+): Promise<Pick<OrgIncident, 'id' | 'assigned_to' | 'priority' | 'status'>> {
+  const { data } = await apiClient.patch(`/incidents/${incidentId}`, body)
   return data
 }

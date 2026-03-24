@@ -10,13 +10,25 @@ import {
   ArrowLeft,
   AlertCircle,
   ExternalLink,
+  CheckCircle,
+  Loader2,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { useIncidentById } from '@/api/useThresholds'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { useIncidentById, useResolveIncident, useUpdateIncident } from '@/api/useThresholds'
+import { useOrgMembers } from '@/api/useOrgMembers'
 import { useCurrentOrgId } from '@/utils/useCurrentOrgId'
+import type { OrgIncident } from '@/api/thresholds'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -68,6 +80,17 @@ function stateBadgeCls(state: string): string {
   return 'border-yellow-500/30 text-yellow-600 bg-yellow-500/10'
 }
 
+function priorityBadgeCls(priority: string): string {
+  if (priority === 'high') return 'border-destructive/30 text-destructive bg-destructive/10'
+  if (priority === 'medium') return 'border-orange-400/30 text-orange-500 bg-orange-400/10'
+  return 'border-muted text-muted-foreground bg-muted/40'
+}
+
+function statusBadgeCls(status: string): string {
+  if (status === 'open') return 'border-destructive/30 text-destructive bg-destructive/10'
+  return 'border-emerald-500/30 text-emerald-600 bg-emerald-500/10'
+}
+
 // ─── InfoField ────────────────────────────────────────────────────────────────
 
 interface InfoFieldProps {
@@ -81,6 +104,140 @@ function InfoField({ label, value, mono }: InfoFieldProps) {
     <div>
       <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
       <p className={mono ? 'font-mono text-xs break-all' : 'text-sm'}>{value}</p>
+    </div>
+  )
+}
+
+// ─── ManagementSection ────────────────────────────────────────────────────────
+
+interface ManagementSectionProps {
+  incident: OrgIncident
+  orgId: string
+}
+
+function ManagementSection({ incident, orgId }: ManagementSectionProps) {
+  const { data: membersData } = useOrgMembers(orgId)
+  const resolveIncident = useResolveIncident(orgId)
+  const updateIncident = useUpdateIncident(orgId)
+
+  const members = membersData?.data ?? []
+  const isResolved = incident.status === 'resolved'
+  const assignedMember = members.find((m) => m.id === incident.assigned_to)
+
+  async function handleResolve() {
+    try {
+      await resolveIncident.mutateAsync(incident.id)
+      toast.success('Incident marked as resolved')
+    } catch {
+      toast.error('Failed to resolve incident')
+    }
+  }
+
+  async function handlePriorityChange(priority: string | null) {
+    if (!priority) return
+    try {
+      await updateIncident.mutateAsync({
+        incidentId: incident.id,
+        body: { priority: priority as OrgIncident['priority'] },
+      })
+      toast.success('Priority updated')
+    } catch {
+      toast.error('Failed to update priority')
+    }
+  }
+
+  async function handleAssigneeChange(value: string | null) {
+    const assigned_to = !value || value === 'unassigned' ? null : value
+    try {
+      await updateIncident.mutateAsync({
+        incidentId: incident.id,
+        body: { assigned_to },
+      })
+      toast.success('Assignee updated')
+    } catch {
+      toast.error('Failed to update assignee')
+    }
+  }
+
+  const isPriorityPending = updateIncident.isPending
+  const isResolvePending = resolveIncident.isPending
+
+  return (
+    <div className="rounded-xl border border-border/60 p-5 space-y-4">
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Management</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+        {/* Resolve */}
+        <div>
+          <p className="text-xs text-muted-foreground mb-2">Status</p>
+          {isResolved ? (
+            <span className="flex items-center gap-1.5 text-sm text-emerald-600">
+              <CheckCircle size={14} />
+              Resolved
+            </span>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs"
+              disabled={isResolvePending}
+              onClick={handleResolve}
+            >
+              {isResolvePending
+                ? <Loader2 size={13} className="animate-spin" />
+                : <CheckCircle size={13} />
+              }
+              Mark as Resolved
+            </Button>
+          )}
+        </div>
+
+        {/* Priority */}
+        <div>
+          <p className="text-xs text-muted-foreground mb-2">Priority</p>
+          <Select
+            value={incident.priority}
+            onValueChange={handlePriorityChange}
+            disabled={isPriorityPending || isResolved}
+          >
+            <SelectTrigger className="h-8 text-xs w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="high">High</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Assignee */}
+        <div>
+          <p className="text-xs text-muted-foreground mb-2">
+            Assigned To
+          </p>
+          <Select
+            value={incident.assigned_to ?? 'unassigned'}
+            onValueChange={handleAssigneeChange}
+            disabled={isPriorityPending || isResolved}
+          >
+            <SelectTrigger className="h-8 text-xs w-48">
+              <SelectValue>
+                {assignedMember ? assignedMember.full_name : 'Unassigned'}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="unassigned">Unassigned</SelectItem>
+              {members.map((member) => (
+                <SelectItem key={member.id} value={member.id}>
+                  {member.full_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+      </div>
     </div>
   )
 }
@@ -123,6 +280,8 @@ export default function IncidentDetailPage() {
   const ServiceIcon = getServiceIcon(incident.resource_service)
   const serviceLabel = getServiceLabel(incident.resource_service)
   const sCls = stateBadgeCls(incident.state)
+  const pCls = priorityBadgeCls(incident.priority)
+  const stCls = statusBadgeCls(incident.status)
   const stateText = incident.state === 'ALARM' ? 'Alarm' : 'Insufficient Data'
   const duration = getDuration(incident.started_at, incident.resolved_at)
   const rawJson = incident.raw_payload != null
@@ -144,10 +303,16 @@ export default function IncidentDetailPage() {
       <div className="flex items-start gap-4">
         <div className="flex-1 space-y-2">
           <div className="flex items-center gap-2.5 flex-wrap">
+            <Badge variant="outline" className={`text-xs capitalize ${stCls}`}>
+              {incident.status}
+            </Badge>
             <Badge variant="outline" className={`text-xs ${sCls}`}>
               {stateText}
             </Badge>
-            {!incident.resolved_at && (
+            <Badge variant="outline" className={`text-xs capitalize ${pCls}`}>
+              {incident.priority}
+            </Badge>
+            {incident.status === 'open' && (
               <span className="flex items-center gap-1 text-xs text-destructive font-medium">
                 <span className="h-1.5 w-1.5 rounded-full bg-destructive animate-pulse" />
                 Active · {duration}
@@ -166,6 +331,9 @@ export default function IncidentDetailPage() {
           Back
         </Button>
       </div>
+
+      {/* Management */}
+      <ManagementSection incident={incident} orgId={orgId} />
 
       {/* Alert Details */}
       <div className="rounded-xl border border-border/60 p-5 space-y-4">

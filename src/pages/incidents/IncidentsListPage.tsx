@@ -70,16 +70,28 @@ function stateLabel(state: string): string {
   return 'Insufficient Data'
 }
 
+function priorityBadgeCls(priority: string): string {
+  if (priority === 'high') return 'border-destructive/30 text-destructive bg-destructive/10'
+  if (priority === 'medium') return 'border-orange-400/30 text-orange-500 bg-orange-400/10'
+  return 'border-muted text-muted-foreground bg-muted/40'
+}
+
+function statusBadgeCls(status: string): string {
+  if (status === 'open') return 'border-destructive/30 text-destructive bg-destructive/10'
+  return 'border-emerald-500/30 text-emerald-600 bg-emerald-500/10'
+}
+
 // ─── SkeletonRow ──────────────────────────────────────────────────────────────
 
 function SkeletonRow() {
   return (
     <TableRow>
+      <TableCell><div className="h-4 w-16 bg-muted animate-pulse rounded" /></TableCell>
+      <TableCell><div className="h-4 w-14 bg-muted animate-pulse rounded" /></TableCell>
       <TableCell><div className="h-4 w-20 bg-muted animate-pulse rounded" /></TableCell>
       <TableCell><div className="h-4 w-32 bg-muted animate-pulse rounded" /></TableCell>
       <TableCell><div className="h-4 w-28 bg-muted animate-pulse rounded" /></TableCell>
       <TableCell><div className="h-4 w-24 bg-muted animate-pulse rounded" /></TableCell>
-      <TableCell><div className="h-4 w-20 bg-muted animate-pulse rounded" /></TableCell>
       <TableCell><div className="h-4 w-20 bg-muted animate-pulse rounded" /></TableCell>
     </TableRow>
   )
@@ -95,6 +107,8 @@ function IncidentRow({ incident }: IncidentRowProps) {
   const navigate = useNavigate()
   const ServiceIcon = getServiceIcon(incident.resource_service)
   const sCls = stateBadgeCls(incident.state)
+  const pCls = priorityBadgeCls(incident.priority)
+  const stCls = statusBadgeCls(incident.status)
 
   function handleClick() {
     navigate({ to: '/incidents/$incidentId', params: { incidentId: incident.id } })
@@ -102,6 +116,16 @@ function IncidentRow({ incident }: IncidentRowProps) {
 
   return (
     <TableRow className="cursor-pointer" onClick={handleClick}>
+      <TableCell>
+        <Badge variant="outline" className={`text-xs capitalize ${stCls}`}>
+          {incident.status}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        <Badge variant="outline" className={`text-xs capitalize ${pCls}`}>
+          {incident.priority}
+        </Badge>
+      </TableCell>
       <TableCell>
         <Badge variant="outline" className={`text-xs ${sCls}`}>
           {stateLabel(incident.state)}
@@ -120,12 +144,6 @@ function IncidentRow({ incident }: IncidentRowProps) {
       <TableCell className="text-xs text-muted-foreground">
         {formatRelativeTime(incident.started_at)}
       </TableCell>
-      <TableCell className="text-xs">
-        {incident.resolved_at
-          ? <span className="text-muted-foreground">{formatRelativeTime(incident.resolved_at)}</span>
-          : <span className="text-destructive font-medium">Active</span>
-        }
-      </TableCell>
     </TableRow>
   )
 }
@@ -136,8 +154,6 @@ export default function IncidentsListPage() {
   const { offset } = useSearch({ from: FROM_PATH })
   const navigate = useNavigate()
   const orgId = useCurrentOrgId()
-
-  console.log("orgId", orgId)
 
   const { data, isLoading, isError, refetch } = useOrgIncidents(orgId, { limit: LIMIT, offset })
 
@@ -194,12 +210,13 @@ export default function IncidentsListPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30">
+                <TableHead className="w-24">Status</TableHead>
+                <TableHead className="w-24">Priority</TableHead>
                 <TableHead className="w-36">State</TableHead>
                 <TableHead>Metric</TableHead>
                 <TableHead>Resource</TableHead>
                 <TableHead className="w-32">Account</TableHead>
                 <TableHead className="w-28">Started</TableHead>
-                <TableHead className="w-28">Resolved</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
