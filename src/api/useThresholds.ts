@@ -71,7 +71,7 @@ export function useIncidents(accountId: string, resourceId: string) {
   })
 }
 
-export function useOrgIncidents(orgId: string | undefined, params: { limit?: number; offset?: number }) {
+export function useOrgIncidents(orgId: string | undefined, params: { limit?: number; offset?: number; status?: 'open' | 'resolved' }) {
   return useQuery({
     queryKey: ['org-incidents', orgId, params],
     queryFn: () => listOrgIncidents(orgId!, params),

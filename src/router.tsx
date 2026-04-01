@@ -12,8 +12,8 @@ import RegisterPage from '@/pages/auth/RegisterPage'
 import ProfilePage from '@/pages/user/ProfilePage'
 import OrgListPage from '@/pages/org/OrgListPage'
 import OrgMembersPage from '@/pages/org/OrgMembersPage'
+import DashboardPage from '@/pages/dashboard/DashboardPage'
 import CloudAccountsPage from '@/pages/cloud/CloudAccountsPage'
-import ResourcesPage from '@/pages/cloud/ResourcesPage'
 import IncidentsListPage from '@/pages/incidents/IncidentsListPage'
 import IncidentDetailPage from '@/pages/incidents/IncidentDetailPage'
 
@@ -32,7 +32,7 @@ const authRoute = createRoute({
   id: 'auth',
   component: AuthLayout,
   beforeLoad: ({ context }) => {
-    if (context.auth.isAuthenticated) throw redirect({ to: '/orgs' })
+    if (context.auth.isAuthenticated) throw redirect({ to: '/dashboard' })
   },
 })
 
@@ -56,6 +56,12 @@ const appRoute = createRoute({
   beforeLoad: ({ context }) => {
     if (!context.auth.isAuthenticated) throw redirect({ to: '/login' })
   },
+})
+
+const dashboardRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/dashboard',
+  component: DashboardPage,
 })
 
 const profileRoute = createRoute({
@@ -97,25 +103,12 @@ const incidentDetailRoute = createRoute({
   component: IncidentDetailPage,
 })
 
-const cloudAccountsResourcesRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: '/cloud-accounts/$accountId/resources',
-  validateSearch: (search: Record<string, unknown>) => ({
-    service: typeof search.service === 'string' ? search.service : '',
-    region:  typeof search.region  === 'string' ? search.region  : '',
-    status:  typeof search.status  === 'string' ? search.status  : '',
-    q:       typeof search.q       === 'string' ? search.q       : '',
-    offset:  typeof search.offset  === 'number' ? search.offset  : 0,
-  }),
-  component: ResourcesPage,
-})
-
 // ─── Index redirect ──────────────────────────────────────────────────────────
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   beforeLoad: ({ context }) => {
-    throw redirect({ to: context.auth.isAuthenticated ? '/orgs' : '/login' })
+    throw redirect({ to: context.auth.isAuthenticated ? '/dashboard' : '/login' })
   },
 })
 
@@ -123,11 +116,11 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   authRoute.addChildren([loginRoute, registerRoute]),
   appRoute.addChildren([
+    dashboardRoute,
     profileRoute,
     orgListRoute,
     orgMembersRoute,
     cloudAccountsRoute,
-    cloudAccountsResourcesRoute,
     incidentsRoute,
     incidentDetailRoute,
   ]),

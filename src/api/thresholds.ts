@@ -148,7 +148,7 @@ export interface OrgIncidentsResponse {
 
 export async function listOrgIncidents(
   orgId: string,
-  params: { limit?: number; offset?: number },
+  params: { limit?: number; offset?: number; status?: 'open' | 'resolved' },
 ): Promise<OrgIncidentsResponse> {
   const { data } = await apiClient.get<OrgIncidentsResponse>(
     `/orgs/${orgId}/incidents`,

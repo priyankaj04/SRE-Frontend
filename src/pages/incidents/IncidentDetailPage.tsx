@@ -374,9 +374,7 @@ export default function IncidentDetailPage() {
           <div>
             <p className="text-xs text-muted-foreground mb-0.5">Resource</p>
             <Link
-              to="/cloud-accounts/$accountId/resources"
-              params={{ accountId: incident.cloud_account_id }}
-              search={{ service: incident.resource_service, region: incident.resource_region, status: '', q: incident.resource_name, offset: 0 }}
+              to="/cloud-accounts"
               className="flex items-center gap-1 text-sm text-primary hover:underline w-fit"
             >
               <ServiceIcon size={13} />

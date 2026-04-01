@@ -10,8 +10,8 @@ export function AuthLayout() {
             <Activity size={18} className="text-primary" />
           </div>
           <div className="text-center">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">SRE Platform</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Infrastructure visibility, simplified</p>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground">SRE System</h1>
+            <p className="text-[11px] text-muted-foreground mt-0.5 tracking-widest uppercase font-medium">Precision Ops</p>
           </div>
         </div>
         <Outlet />

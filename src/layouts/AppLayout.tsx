@@ -1,9 +1,13 @@
 import { Outlet, Link, useNavigate } from '@tanstack/react-router'
 import {
   Activity,
+  AlertCircle,
   Building2,
   Cloud,
+  Layers,
+  LayoutDashboard,
   LogOut,
+  Settings,
   User,
   ChevronDown,
 } from 'lucide-react'
@@ -20,9 +24,10 @@ import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
 
 const navItems = [
-  { to: '/orgs',          icon: Building2, label: 'Organisations' },
-  { to: '/cloud-accounts', icon: Cloud,     label: 'Cloud Accounts' },
-  { to: '/incidents',     icon: Activity,  label: 'Incidents' },
+  { to: '/dashboard',      icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/incidents',      icon: AlertCircle,     label: 'Incidents' },
+  { to: '/cloud-accounts', icon: Cloud,           label: 'Cloud Accounts' },
+  { to: '/orgs',           icon: Building2,       label: 'Organization' },
 ]
 
 function initials(name?: string | null) {
@@ -48,46 +53,57 @@ export function AppLayout() {
   return (
     <div className="min-h-screen flex bg-background">
       {/* Sidebar */}
-      <aside className="w-56 border-r border-border/60 flex flex-col shrink-0 bg-sidebar">
+      <aside className="w-60 flex flex-col shrink-0 bg-sidebar">
         {/* Brand */}
-        <div className="h-14 flex items-center px-4 border-b border-border/60">
-          <div className="flex items-center gap-2.5">
-            <div className="h-6 w-6 rounded-md bg-primary/15 flex items-center justify-center shrink-0">
-              <Activity size={12} className="text-primary" />
-            </div>
-            <span className="font-semibold text-sm tracking-tight text-foreground">SRE Platform</span>
+        <div className="h-16 flex items-center px-4 gap-3">
+          <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center shrink-0 ring-1 ring-primary/30">
+            <Activity size={15} className="text-primary" />
+          </div>
+          <div className="flex flex-col leading-tight">
+            <span className="font-semibold text-sm text-white tracking-tight">SRE System</span>
+            <span className="text-sm text-muted-foreground tracking-widest uppercase font-medium">Precision Ops</span>
           </div>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 p-2 space-y-0.5">
+        <nav className="flex-1 px-3 pt-2 pb-4 space-y-0.5">
           {navItems.map(({ to, icon: Icon, label }) => (
             <Link
-              key={to}
+              key={`${to}-${label}`}
               to={to}
-              className="group flex items-center gap-2.5 px-3 py-2 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-all duration-200 [&.active]:bg-primary/10 [&.active]:text-primary [&.active]:font-medium [&.active]:shadow-[inset_0_0_0_1px_oklch(0.60_0.19_264_/_0.15)]"
+              activeProps={{ className: 'text-blue-400 bg-primary font-medium' }}
+              className="group relative flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-muted-foreground transition-all duration-200 hover:bg-accent/50"
             >
-              <Icon size={15} className="transition-transform duration-200 group-hover:translate-x-0.5" />
+              <Icon size={16} className="shrink-0 transition-colors duration-200" />
               {label}
             </Link>
           ))}
         </nav>
 
-        {/* User footer */}
-        <div className="p-2 border-t border-border/60">
+        {/* Settings + User footer */}
+        <div className="px-3 pb-3 space-y-0.5">
+          <Link
+            to="/profile"
+            activeProps={{ className: 'text-blue-400 bg-primary font-medium' }}
+            className="group flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-muted-foreground transition-all duration-200 hover:bg-accent/50"
+          >
+            <Settings size={16} className="shrink-0" />
+            Settings
+          </Link>
+
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
-                <Button variant="ghost" className="w-full justify-start gap-2 h-10 px-2 hover:bg-accent/60" />
+                <Button variant="ghost" className="w-full justify-start gap-2.5 h-10 px-3 hover:bg-accent/50 text-muted-foreground" />
               }
             >
               <Avatar className="h-6 w-6 shrink-0">
-                <AvatarFallback className="text-xs bg-primary/15 text-primary font-medium">
+                <AvatarFallback className="text-sm bg-primary/20 text-primary font-semibold">
                   {initials(user?.fullName)}
                 </AvatarFallback>
               </Avatar>
-              <span className="flex-1 text-left text-sm truncate text-foreground">{user?.fullName ?? 'Account'}</span>
-              <ChevronDown size={13} className="text-muted-foreground shrink-0" />
+              <span className="flex-1 text-left text-sm truncate">{user?.fullName ?? 'Account'}</span>
+              <ChevronDown size={13} className="shrink-0 opacity-60" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem
@@ -109,8 +125,8 @@ export function AppLayout() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
-        <div className="max-w-5xl mx-auto p-6 lg:p-8">
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-y-auto p-6 lg:p-8">
           <Outlet />
         </div>
       </main>
