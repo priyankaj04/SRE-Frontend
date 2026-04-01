@@ -1,29 +1,18 @@
 import { type ElementType } from 'react'
 import { Link, useParams } from '@tanstack/react-router'
 import {
-  Server,
-  Database,
-  HardDrive,
-  Zap,
-  Globe,
-  Box,
-  ArrowLeft,
-  AlertCircle,
-  ExternalLink,
-  CheckCircle,
-  Loader2,
+  Server, Database, HardDrive, Zap, Globe, Box,
+  AlertCircle, ExternalLink, CheckCircle, Loader2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Breadcrumb, BreadcrumbItem, BreadcrumbLink,
+  BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useIncidentById, useResolveIncident, useUpdateIncident } from '@/api/useThresholds'
 import { useOrgMembers } from '@/api/useOrgMembers'
@@ -35,22 +24,14 @@ import type { OrgIncident } from '@/api/thresholds'
 const FROM_PATH = '/app/incidents/$incidentId' as const
 
 const SERVICE_ICONS: Record<string, ElementType> = {
-  ec2:    Server,
-  rds:    Database,
-  s3:     HardDrive,
-  lambda: Zap,
-  elb:    Globe,
+  ec2: Server, rds: Database, s3: HardDrive, lambda: Zap, elb: Globe,
 }
 
 const SERVICE_LABELS: Record<string, string> = {
-  ec2:    'EC2',
-  rds:    'RDS',
-  s3:     'S3',
-  lambda: 'Lambda',
-  elb:    'ELB',
+  ec2: 'EC2', rds: 'RDS', s3: 'S3', lambda: 'Lambda', elb: 'ELB',
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatDateTime(dateStr: string | null): string {
   if (!dateStr) return '—'
@@ -75,58 +56,51 @@ function getServiceLabel(service: string): string {
   return SERVICE_LABELS[service?.toLowerCase()] ?? service?.toUpperCase() ?? '—'
 }
 
-function stateBadgeCls(state: string): string {
-  if (state === 'ALARM') return 'border-destructive/30 text-destructive bg-destructive/10'
-  return 'border-yellow-500/30 text-yellow-600 bg-yellow-500/10'
-}
-
-function priorityBadgeCls(priority: string): string {
-  if (priority === 'high') return 'border-destructive/30 text-destructive bg-destructive/10'
-  if (priority === 'medium') return 'border-orange-400/30 text-orange-500 bg-orange-400/10'
-  return 'border-muted text-muted-foreground bg-muted/40'
-}
-
-function statusBadgeCls(status: string): string {
-  if (status === 'open') return 'border-destructive/30 text-destructive bg-destructive/10'
-  return 'border-emerald-500/30 text-emerald-600 bg-emerald-500/10'
+const priorityConfig: Record<string, { label: string; cls: string; dot: string }> = {
+  high:   { label: 'High',   cls: 'bg-red-500/15 text-red-400 border-red-500/20',       dot: 'bg-red-400' },
+  medium: { label: 'Medium', cls: 'bg-amber-500/15 text-amber-400 border-amber-500/20', dot: 'bg-amber-400' },
+  low:    { label: 'Low',    cls: 'bg-muted text-white border-border',                    dot: 'bg-white/30' },
 }
 
 // ─── InfoField ────────────────────────────────────────────────────────────────
 
-interface InfoFieldProps {
-  label: string
-  value: string
-  mono?: boolean
-}
-
-function InfoField({ label, value, mono }: InfoFieldProps) {
+function InfoField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div>
-      <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
-      <p className={mono ? 'font-mono text-xs break-all' : 'text-sm'}>{value}</p>
+    <div className="space-y-1">
+      <p className="text-sm text-white">{label}</p>
+      <p className={`text-sm text-white ${mono ? 'font-mono break-all' : ''}`}>{value}</p>
     </div>
   )
 }
 
-// ─── ManagementSection ────────────────────────────────────────────────────────
+// ─── SectionCard ─────────────────────────────────────────────────────────────
 
-interface ManagementSectionProps {
-  incident: OrgIncident
-  orgId: string
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-border/60 overflow-hidden">
+      <div className="px-5 py-3 border-b border-border/40 bg-muted/10">
+        <p className="text-sm font-medium text-white uppercase tracking-widest">{title}</p>
+      </div>
+      <div className="px-5 py-4">
+        {children}
+      </div>
+    </div>
+  )
 }
 
-function ManagementSection({ incident, orgId }: ManagementSectionProps) {
+// ─── ManagementCard ──────────────────────────────────────────────────────────
+
+function ManagementCard({ incident, orgId }: { incident: OrgIncident; orgId: string }) {
   const { data: membersData } = useOrgMembers(orgId)
-  const resolveIncident = useResolveIncident(orgId)
-  const updateIncident = useUpdateIncident(orgId)
+  const resolveIncidentMutation = useResolveIncident(orgId)
+  const updateIncidentMutation = useUpdateIncident(orgId)
 
   const members = membersData?.data ?? []
   const isResolved = incident.status === 'resolved'
-  const assignedMember = members.find((m) => m.id === incident.assigned_to)
 
   async function handleResolve() {
     try {
-      await resolveIncident.mutateAsync(incident.id)
+      await resolveIncidentMutation.mutateAsync(incident.id)
       toast.success('Incident marked as resolved')
     } catch {
       toast.error('Failed to resolve incident')
@@ -136,7 +110,7 @@ function ManagementSection({ incident, orgId }: ManagementSectionProps) {
   async function handlePriorityChange(priority: string | null) {
     if (!priority) return
     try {
-      await updateIncident.mutateAsync({
+      await updateIncidentMutation.mutateAsync({
         incidentId: incident.id,
         body: { priority: priority as OrgIncident['priority'] },
       })
@@ -147,9 +121,10 @@ function ManagementSection({ incident, orgId }: ManagementSectionProps) {
   }
 
   async function handleAssigneeChange(value: string | null) {
-    const assigned_to = !value || value === 'unassigned' ? null : value
+    if (value === null) return
+    const assigned_to = value === '__unassigned__' ? null : value
     try {
-      await updateIncident.mutateAsync({
+      await updateIncidentMutation.mutateAsync({
         incidentId: incident.id,
         body: { assigned_to },
       })
@@ -159,33 +134,32 @@ function ManagementSection({ incident, orgId }: ManagementSectionProps) {
     }
   }
 
-  const isPriorityPending = updateIncident.isPending
-  const isResolvePending = resolveIncident.isPending
-
   return (
-    <div className="rounded-xl border border-border/60 p-5 space-y-4">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Management</p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="rounded-xl border border-border/60 overflow-hidden">
+      <div className="px-5 py-3 border-b border-border/40 bg-muted/10">
+        <p className="text-sm font-medium text-white uppercase tracking-widest">Management</p>
+      </div>
+      <div className="px-5 py-4 space-y-5">
 
-        {/* Resolve */}
-        <div>
-          <p className="text-xs text-muted-foreground mb-2">Status</p>
+        {/* Status */}
+        <div className="space-y-2">
+          <p className="text-sm text-white">Status</p>
           {isResolved ? (
-            <span className="flex items-center gap-1.5 text-sm text-emerald-600">
+            <div className="flex items-center gap-2 text-sm text-emerald-400 font-medium">
               <CheckCircle size={14} />
               Resolved
-            </span>
+            </div>
           ) : (
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
-              className="h-8 gap-1.5 text-xs"
-              disabled={isResolvePending}
+              className="h-9 gap-2 text-sm w-full justify-center font-semibold shadow-md shadow-primary/30 hover:shadow-primary/50 transition-shadow"
+              disabled={resolveIncidentMutation.isPending}
               onClick={handleResolve}
             >
-              {isResolvePending
+              {resolveIncidentMutation.isPending
                 ? <Loader2 size={13} className="animate-spin" />
-                : <CheckCircle size={13} />
+                : <CheckCircle size={14} />
               }
               Mark as Resolved
             </Button>
@@ -193,14 +167,14 @@ function ManagementSection({ incident, orgId }: ManagementSectionProps) {
         </div>
 
         {/* Priority */}
-        <div>
-          <p className="text-xs text-muted-foreground mb-2">Priority</p>
+        <div className="space-y-2">
+          <p className="text-sm text-white">Priority</p>
           <Select
             value={incident.priority}
             onValueChange={handlePriorityChange}
-            disabled={isPriorityPending || isResolved}
+            disabled={updateIncidentMutation.isPending || isResolved}
           >
-            <SelectTrigger className="h-8 text-xs w-36">
+            <SelectTrigger className="h-8 text-sm w-full text-white">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -212,26 +186,20 @@ function ManagementSection({ incident, orgId }: ManagementSectionProps) {
         </div>
 
         {/* Assignee */}
-        <div>
-          <p className="text-xs text-muted-foreground mb-2">
-            Assigned To
-          </p>
+        <div className="space-y-2">
+          <p className="text-sm text-white">Assigned To</p>
           <Select
-            value={incident.assigned_to ?? 'unassigned'}
+            value={incident.assigned_to ?? '__unassigned__'}
             onValueChange={handleAssigneeChange}
-            disabled={isPriorityPending || isResolved}
+            disabled={updateIncidentMutation.isPending}
           >
-            <SelectTrigger className="h-8 text-xs w-48">
-              <SelectValue>
-                {assignedMember ? assignedMember.full_name : 'Unassigned'}
-              </SelectValue>
+            <SelectTrigger className="h-8 text-sm w-full text-white">
+              <SelectValue placeholder="Unassigned" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="unassigned">Unassigned</SelectItem>
-              {members.map((member) => (
-                <SelectItem key={member.id} value={member.id}>
-                  {member.full_name}
-                </SelectItem>
+              <SelectItem value="__unassigned__">Unassigned</SelectItem>
+              {members.map(m => (
+                <SelectItem key={m.id} value={m.full_name}>{m.full_name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -256,18 +224,23 @@ export default function IncidentDetailPage() {
 
   if (isError || !incident) {
     return (
-      <div className="space-y-4">
-        <Link to="/incidents" search={{ offset: 0 }} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit">
-          <ArrowLeft size={14} />
-          Incidents
-        </Link>
-        <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+      <div className="flex-1 flex flex-col -m-6 lg:-m-8">
+        <div className="px-6 lg:px-8 py-4 border-b border-border/40">
+          <Link
+            to="/incidents"
+            search={{ offset: 0 }}
+            className="flex items-center gap-1.5 text-sm text-white hover:text-white transition-colors w-fit"
+          >
+            ← Incidents
+          </Link>
+        </div>
+        <div className="m-6 flex items-center gap-3 px-4 py-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
           <AlertCircle size={15} className="shrink-0" />
           <span>Failed to load incident.</span>
           <Button
             variant="ghost"
             size="sm"
-            className="ml-auto h-6 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+            className="ml-auto h-6 text-sm text-destructive hover:bg-destructive/10"
             onClick={() => refetch()}
           >
             Retry
@@ -279,135 +252,186 @@ export default function IncidentDetailPage() {
 
   const ServiceIcon = getServiceIcon(incident.resource_service)
   const serviceLabel = getServiceLabel(incident.resource_service)
-  const sCls = stateBadgeCls(incident.state)
-  const pCls = priorityBadgeCls(incident.priority)
-  const stCls = statusBadgeCls(incident.status)
-  const stateText = incident.state === 'ALARM' ? 'Alarm' : 'Insufficient Data'
   const duration = getDuration(incident.started_at, incident.resolved_at)
+  const priority = priorityConfig[incident.priority] ?? priorityConfig.low
   const rawJson = incident.raw_payload != null
     ? JSON.stringify(incident.raw_payload, null, 2)
     : null
 
-  return (
-    <div className="space-y-6">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        <Link to="/incidents" search={{ offset: 0 }} className="hover:text-foreground transition-colors duration-150">
-          Incidents
-        </Link>
-        <span>/</span>
-        <span className="text-foreground font-mono text-xs">{incident.id}</span>
-      </div>
+  const stateLabel = incident.state === 'ALARM' ? 'Alarm' : 'Insufficient Data'
+  const stateCls = incident.state === 'ALARM'
+    ? 'bg-red-500/15 text-red-400 border border-red-500/20'
+    : 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
 
-      {/* Header */}
-      <div className="flex items-start gap-4">
-        <div className="flex-1 space-y-2">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <Badge variant="outline" className={`text-xs capitalize ${stCls}`}>
-              {incident.status}
-            </Badge>
-            <Badge variant="outline" className={`text-xs ${sCls}`}>
-              {stateText}
-            </Badge>
-            <Badge variant="outline" className={`text-xs capitalize ${pCls}`}>
-              {incident.priority}
-            </Badge>
-            {incident.status === 'open' && (
-              <span className="flex items-center gap-1 text-xs text-destructive font-medium">
-                <span className="h-1.5 w-1.5 rounded-full bg-destructive animate-pulse" />
-                Active · {duration}
-              </span>
-            )}
-          </div>
-          <h1 className="text-xl font-semibold">{incident.metric_name}</h1>
-        </div>
+  const statusCls = incident.status === 'open'
+    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+    : 'bg-muted text-white border border-border'
+
+  return (
+    <div className="flex-1 flex flex-col -m-6 lg:-m-8">
+
+      {/* Breadcrumb bar */}
+      <div className="flex items-center justify-between px-6 lg:px-8 py-4 border-b border-border/40 shrink-0">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink
+                render={<Link to="/dashboard" />}
+                className="text-white hover:text-white text-sm font-medium transition-colors"
+              >
+                Dashboard
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator className="text-white" />
+            <BreadcrumbItem>
+              <BreadcrumbLink
+                render={<Link to="/incidents" search={{ offset: 0 }} />}
+                className="text-white hover:text-white text-sm font-medium transition-colors"
+              >
+                Incidents
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator className="text-white" />
+            <BreadcrumbItem>
+              <BreadcrumbPage className="text-white text-sm font-medium max-w-xs truncate">
+                {incident.metric_name}
+              </BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+
         <Button
           variant="ghost"
           size="sm"
-          className="gap-1.5 text-muted-foreground"
+          className="gap-1.5 text-sm text-white hover:text-white"
           render={<Link to="/incidents" search={{ offset: 0 }} />}
         >
-          <ArrowLeft size={14} />
-          Back
+          ← Back
         </Button>
       </div>
 
-      {/* Management */}
-      <ManagementSection incident={incident} orgId={orgId} />
-
-      {/* Alert Details */}
-      <div className="rounded-xl border border-border/60 p-5 space-y-4">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Alert Details</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <InfoField label="State" value={stateText} />
-          <InfoField label="Metric" value={incident.metric_name} />
-          <InfoField label="Threshold Value" value={String(incident.threshold_value)} />
-          <InfoField
-            label="Alarm ARN"
-            value={incident.alarm_arn ?? 'Not linked'}
-            mono={!!incident.alarm_arn}
-          />
-          <InfoField label="Duration" value={duration} />
-          <InfoField label="Recorded" value={formatDateTime(incident.created_at)} />
-        </div>
-      </div>
-
-      {/* Timeline */}
-      <div className="rounded-xl border border-border/60 p-5 space-y-4">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Timeline</p>
-        <div className="grid grid-cols-2 gap-4">
-          <InfoField label="Started" value={formatDateTime(incident.started_at)} />
-          <div>
-            <p className="text-xs text-muted-foreground mb-0.5">Resolved</p>
-            {incident.resolved_at
-              ? <p className="text-sm">{formatDateTime(incident.resolved_at)}</p>
-              : <p className="text-sm text-destructive font-medium">Unresolved</p>
-            }
+      {/* Incident header */}
+      <div className="px-6 lg:px-8 py-5 border-b border-border/40 bg-muted/10 shrink-0">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-2 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`inline-flex items-center text-sm font-medium px-2.5 py-0.5 rounded border uppercase tracking-wide ${statusCls}`}>
+                {incident.status}
+              </span>
+              <span className={`inline-flex items-center text-sm font-medium px-2.5 py-0.5 rounded border uppercase tracking-wide ${stateCls}`}>
+                {stateLabel}
+              </span>
+              <span className={`inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-0.5 rounded border uppercase tracking-wide ${priority.cls}`}>
+                <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${priority.dot}`} />
+                {priority.label}
+              </span>
+              {incident.status === 'open' && (
+                <span className="flex items-center gap-1.5 text-sm text-red-400 font-medium">
+                  <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
+                  Active · {duration}
+                </span>
+              )}
+            </div>
+            <h1 className="text-xl font-semibold text-white">{incident.metric_name}</h1>
+            <div className="flex items-center gap-1.5 text-sm text-white">
+              <ServiceIcon size={13} className="shrink-0" />
+              <span>{incident.resource_name || incident.resource_id}</span>
+              {incident.resource_region && (
+                <>
+                  <span className="opacity-30">·</span>
+                  <span>{incident.resource_region}</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Resource & Account */}
-      <div className="rounded-xl border border-border/60 p-5 space-y-4">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Source</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-          <div>
-            <p className="text-xs text-muted-foreground mb-0.5">Resource</p>
-            <Link
-              to="/cloud-accounts"
-              className="flex items-center gap-1 text-sm text-primary hover:underline w-fit"
-            >
-              <ServiceIcon size={13} />
-              {incident.resource_name || incident.resource_id}
-              <ExternalLink size={11} />
-            </Link>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-0.5">Service</p>
-            <span className="flex items-center gap-1.5 text-sm">
-              <ServiceIcon size={13} className="text-muted-foreground" />
-              {serviceLabel}
-            </span>
-          </div>
-          <InfoField label="Region" value={incident.resource_region} />
-          <InfoField label="Account" value={incident.account_name} />
-          <div>
-            <p className="text-xs text-muted-foreground mb-0.5">Account ID</p>
-            <p className="font-mono text-xs break-all">{incident.cloud_account_id}</p>
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-6 lg:px-8 py-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6 items-start">
+
+            {/* Left: info sections */}
+            <div className="space-y-6">
+
+              {/* Alert Details */}
+              <SectionCard title="Alert Details">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4">
+                  <InfoField label="Metric" value={incident.metric_name} />
+                  <InfoField label="Threshold Value" value={String(incident.threshold_value)} />
+                  <InfoField label="State" value={stateLabel} />
+                  <InfoField label="Duration" value={duration} />
+                  <InfoField label="Recorded" value={formatDateTime(incident.created_at)} />
+                  <InfoField
+                    label="Alarm ARN"
+                    value={incident.alarm_arn ?? 'Not linked'}
+                    mono={!!incident.alarm_arn}
+                  />
+                </div>
+              </SectionCard>
+
+              {/* Timeline */}
+              <SectionCard title="Timeline">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                  <InfoField label="Started" value={formatDateTime(incident.started_at)} />
+                  <div className="space-y-1">
+                    <p className="text-sm text-white">Resolved</p>
+                    {incident.resolved_at
+                      ? <p className="text-sm text-white">{formatDateTime(incident.resolved_at)}</p>
+                      : <p className="text-sm text-red-400 font-medium">Not resolved</p>
+                    }
+                  </div>
+                </div>
+              </SectionCard>
+
+              {/* Source */}
+              <SectionCard title="Source">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4">
+                  <div className="space-y-1">
+                    <p className="text-sm text-white">Resource</p>
+                    <Link
+                      to="/cloud-accounts"
+                      className="flex items-center gap-1.5 text-sm text-primary hover:underline w-fit"
+                    >
+                      <ServiceIcon size={13} />
+                      <span>{incident.resource_name || incident.resource_id}</span>
+                      <ExternalLink size={11} />
+                    </Link>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-white">Service</p>
+                    <div className="flex items-center gap-1.5 text-sm text-white">
+                      <ServiceIcon size={13} className="text-white" />
+                      {serviceLabel}
+                    </div>
+                  </div>
+                  <InfoField label="Region" value={incident.resource_region} />
+                  <InfoField label="Account" value={incident.account_name} />
+                  <InfoField label="Account ID" value={incident.cloud_account_id} mono />
+                  <InfoField label="Resource ID" value={incident.resource_id} mono />
+                </div>
+              </SectionCard>
+
+              {/* Raw Payload */}
+              {rawJson && (
+                <SectionCard title="Raw Payload">
+                  <pre className="text-sm font-mono text-white bg-muted/40 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
+                    {rawJson}
+                  </pre>
+                </SectionCard>
+              )}
+            </div>
+
+            {/* Right: management */}
+            <div className="lg:sticky lg:top-6">
+              <ManagementCard incident={incident} orgId={orgId} />
+            </div>
+
           </div>
         </div>
       </div>
 
-      {/* Raw Payload */}
-      {rawJson && (
-        <div className="rounded-xl border border-border/60 p-5 space-y-3">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Raw Payload</p>
-          <Separator />
-          <pre className="text-xs font-mono bg-muted/50 rounded-md p-3 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
-            {rawJson}
-          </pre>
-        </div>
-      )}
     </div>
   )
 }
