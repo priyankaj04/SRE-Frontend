@@ -23,3 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 CLAUDE.md
+
+API.md
+CLAUDE.md
+docs.md
+
+
+.claude/
